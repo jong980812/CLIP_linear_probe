@@ -220,7 +220,7 @@ class VisionTransformer(nn.Module):
         self.ln_post = LayerNorm(width)
         self.proj = nn.Parameter(scale * torch.randn(width, output_dim))
 
-    def forward(self, x: torch.Tensor, is_cls: bool ):
+    def forward(self, x: torch.Tensor, is_proj: bool ):
         x = self.conv1(x)  # shape = [*, width, grid, grid]
         x = x.reshape(x.shape[0], x.shape[1], -1)  # shape = [*, width, grid ** 2]
         x = x.permute(0, 2, 1)  # shape = [*, grid ** 2, width]
@@ -232,20 +232,12 @@ class VisionTransformer(nn.Module):
         x = self.transformer(x)
         x = x.permute(1, 0, 2)  # LND -> NLD
 
-        # x.shape => (N, 257, 1024) 왜 257이냐? 256이 패치 토큰임 (한 이미지에 대해) 여기서 cls 가 +1됨
-        
-        if not is_cls:
-            patch_tokens = self.ln_post(x[:, 1:, :])
-            patch_token = torch.mean(patch_tokens, dim=1)
-            return patch_token
-        else:
-            cls = self.ln_post(x[:, 0, :])#768 -> cls만 나옴 근데, x[:, 1:, :] <- cls를 제외한 패치 토큰 나옴
-            return cls
+        before_proj = self.ln_post(x[:, 0, :])#768
 
-        # if self.proj is not None:
-        #     after_proj = before_proj @ self.proj#512
+        if self.proj is not None:
+            after_proj = before_proj @ self.proj#512
 
-        # return cls if is_cls else patch_token
+        return after_proj if is_proj else before_proj
 
 
 class CLIP(nn.Module):
@@ -345,13 +337,13 @@ class CLIP(nn.Module):
     def dtype(self):
         return self.visual.conv1.weight.dtype
 
-    def encode_image(self, image, is_cls=True):
-        return self.visual(image.type(self.dtype), is_cls=is_cls)
+    def encode_image(self, image,is_proj):
+        return self.visual(image.type(self.dtype),is_proj)
 
     def encode_text(self, text):
         x = self.token_embedding(text).type(self.dtype)  # [batch_size, n_ctx, d_model]
 
-        x = x + self.positional_embedding.type(self.dtype)
+        # x = x + self.positional_embedding.type(self.dtype)
         x = x.permute(1, 0, 2)  # NLD -> LND
         x = self.transformer(x)
         x = x.permute(1, 0, 2)  # LND -> NLD

@@ -8,3 +8,6 @@ __pycache__/
 thumbs.db
 .DS_Store
 .idea
+results/
+.vscode/
+out_files/
