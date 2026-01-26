@@ -220,12 +220,56 @@ class VisionTransformer(nn.Module):
         self.ln_post = LayerNorm(width)
         self.proj = nn.Parameter(scale * torch.randn(width, output_dim))
 
-    def forward(self, x: torch.Tensor, is_cls: bool ):
+    # def forward(self, x: torch.Tensor, is_cls: bool, pos_mode: str = "normal" ):
+    def forward(self, x: torch.Tensor, is_cls: bool = True, pos_mode: str = "normal", use_proj: bool = False):
+        '''
+        Docstring for forward
+        
+        :param is_cls: whether cls token is used for feature extraction or not. 
+        default is True
+        
+        
+        :param pos_mode: position embedding mode. Options are:
+            - "normal": original positional embedding
+            - "shuffle": shuffle patch position embeddings (keep cls position)
+            - "mean": use mean of patch position embeddings (keep cls position)
+        
+        :param use_proj: whether to apply the projection matrix to the text embedding space or not.
+        '''
         x = self.conv1(x)  # shape = [*, width, grid, grid]
         x = x.reshape(x.shape[0], x.shape[1], -1)  # shape = [*, width, grid ** 2]
         x = x.permute(0, 2, 1)  # shape = [*, grid ** 2, width]
         x = torch.cat([self.class_embedding.to(x.dtype) + torch.zeros(x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device), x], dim=1)  # shape = [*, grid ** 2 + 1, width]
-        x = x + self.positional_embedding.to(x.dtype)
+        if pos_mode == "normal":
+            # 원래대로
+            x = x + self.positional_embedding.to(x.dtype)
+        
+        elif pos_mode == "shuffle":
+            # CLS는 유지, patch position만 shuffle
+            pos_emb = self.positional_embedding.to(x.dtype)
+            cls_pos = pos_emb[0:1]  # CLS position
+            patch_pos = pos_emb[1:]  # patch positions
+            
+            # 랜덤하게 섞기
+            shuffle_idx = torch.randperm(patch_pos.shape[0], device=x.device)
+            patch_pos_shuffled = patch_pos[shuffle_idx]
+            
+            pos_emb_shuffled = torch.cat([cls_pos, patch_pos_shuffled], dim=0)
+            x = x + pos_emb_shuffled
+        
+        elif pos_mode == "mean":
+            # 모든 patch에 동일한 평균값 적용 (위치 정보 완전 제거)
+            pos_emb = self.positional_embedding.to(x.dtype)
+            cls_pos = pos_emb[0:1]
+            patch_pos_mean = pos_emb[1:].mean(dim=0, keepdim=True).expand(pos_emb.shape[0]-1, -1)
+            
+            pos_emb_mean = torch.cat([cls_pos, patch_pos_mean], dim=0)
+            x = x + pos_emb_mean
+        
+        elif pos_mode == "zero":
+            # 아예 더하지 않음 (baseline, 성능 많이 떨어질 것)
+            pass
+        # x = x + self.positional_embedding.to(x.dtype)
         x = self.ln_pre(x)
 
         x = x.permute(1, 0, 2)  # NLD -> LND
@@ -233,20 +277,17 @@ class VisionTransformer(nn.Module):
         x = x.permute(1, 0, 2)  # LND -> NLD
 
         # x.shape => (N, 257, 1024) 왜 257이냐? 256이 패치 토큰임 (한 이미지에 대해) 여기서 cls 가 +1됨
-        
-        if not is_cls:
-            patch_tokens = self.ln_post(x[:, 1:, :])
-            patch_token = torch.mean(patch_tokens, dim=1)
-            return patch_token
+            
+        # Feature 추출
+        if is_cls:
+            out = self.ln_post(x[:, 0, :])  # (N, 1024)
         else:
-            cls = self.ln_post(x[:, 0, :])#768 -> cls만 나옴 근데, x[:, 1:, :] <- cls를 제외한 패치 토큰 나옴
-            return cls
-
-        # if self.proj is not None:
-        #     after_proj = before_proj @ self.proj#512
-
-        # return cls if is_cls else patch_token
-
+            patch_tokens = self.ln_post(x[:, 1:, :])
+            out = torch.mean(patch_tokens, dim=1)  # (N, 1024)
+        
+        # Projection 적용 여부
+        if use_proj:
+            out = out @ self.proj  # (N, 1024) → (N, 512)
 
 class CLIP(nn.Module):
     def __init__(self,
@@ -345,8 +386,8 @@ class CLIP(nn.Module):
     def dtype(self):
         return self.visual.conv1.weight.dtype
 
-    def encode_image(self, image, is_cls=True):
-        return self.visual(image.type(self.dtype), is_cls=is_cls)
+    def encode_image(self, image, is_cls=True, pos_mode="normal", use_proj=False):
+        return self.visual(image.type(self.dtype), is_cls=is_cls, pos_mode=pos_mode, use_proj=use_proj)
 
     def encode_text(self, text):
         x = self.token_embedding(text).type(self.dtype)  # [batch_size, n_ctx, d_model]

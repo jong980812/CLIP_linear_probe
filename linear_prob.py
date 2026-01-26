@@ -63,6 +63,7 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Proceeding on {device}")
     model, preprocess = clip.load(args.model_type, device, download_root="/data/dataset/LLaVA-Video-100K-Subset/clip_weight")
+    model.eval()
 #!
     extractor = CLIPFeatureExtractor(model)
 
@@ -105,7 +106,6 @@ def main():
     classifier = LogisticRegression(random_state=0, C=0.316, max_iter=1000, verbose=1)
     classifier.fit(train_features, train_labels)
     
-    model.eval()
     # Evaluate using the logistic regression classifier
     predictions = classifier.predict(test_features)
     accuracy = np.mean((test_labels == predictions).astype(float)) * 100.
