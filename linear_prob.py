@@ -27,7 +27,6 @@ def get_features(loader, model, device, is_cls=False):
     with torch.no_grad():
         for images, labels in tqdm(loader):
             features = model.encode_image(images.to(device), is_cls=is_cls)
-
             all_features.append(features)
             all_labels.append(labels)
 
