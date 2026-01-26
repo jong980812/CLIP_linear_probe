@@ -139,6 +139,9 @@ def main():
         )
     print(f"Results saved to {args.output_dir}")
     print(f"Accuracy = {accuracy:.3f}")
+    
+    with open(os.path.join(args.output_dir, args.task_name, "_acc.txt"), "a") as f:
+        f.write(f"Accuracy = {accuracy:.3f}\n")
 
 if __name__ == "__main__":
     main()
