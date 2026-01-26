@@ -442,3 +442,69 @@ def build_model(state_dict: dict):
     convert_weights(model)
     model.load_state_dict(state_dict)
     return model.eval()
+
+
+
+
+
+
+
+
+
+#!
+class CLIPFeatureExtractor:
+    def __init__(self, clip_model):
+        self.clip_model = clip_model
+        self.features = {}
+        self._hooks = []
+    
+    def _get_hook(self, name):
+        def hook(module, input, output):
+            # output shape: (L, N, D) -> (N, L, D)로 변환
+            self.features[name] = output.permute(1, 0, 2)
+        return hook
+    
+    def register_hook(self, layer_idx: int):
+        """
+        layer_idx: -1이면 마지막 layer, -2면 마지막에서 두 번째 layer
+        """
+        self.clear_hooks()
+        
+        # Transformer의 resblocks에서 해당 layer 가져오기
+        resblocks = self.clip_model.visual.transformer.resblocks
+        num_layers = len(resblocks)
+        
+        # negative index 처리
+        if layer_idx < 0:
+            layer_idx = num_layers + layer_idx
+        
+        hook = resblocks[layer_idx].register_forward_hook(self._get_hook(f'layer_{layer_idx}'))
+        self._hooks.append(hook)
+        
+        return layer_idx
+    
+    def clear_hooks(self):
+        for hook in self._hooks:
+            hook.remove()
+        self._hooks = []
+        self.features = {}
+    
+    def encode_image(self, image, layer_idx: int = -2, is_cls: bool = True):
+        """
+        특정 layer의 feature를 반환
+        """
+        actual_idx = self.register_hook(layer_idx)
+        
+        # forward 실행 (hook이 자동으로 feature 저장)
+        _ = self.clip_model.encode_image(image, is_cls=is_cls)
+        
+        # 저장된 intermediate feature 가져오기
+        feature = self.features[f'layer_{actual_idx}']
+        
+        if is_cls:
+            return feature[:, 0, :]  # CLS token만
+        else:
+            return feature[:, 1:, :].mean(dim=1)  # patch tokens 평균
+    
+    def __del__(self):
+        self.clear_hooks()
