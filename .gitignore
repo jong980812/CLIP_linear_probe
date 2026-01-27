@@ -11,3 +11,4 @@ thumbs.db
 results/
 .vscode/
 out_files/
+*.sh
