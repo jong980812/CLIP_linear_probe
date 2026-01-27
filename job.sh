@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=clip_linear_pe_shuffle
+#SBATCH --job-name=clip_linear_baseline_layer6
 #SBATCH -o ./out_files/%x_%j.out
 #SBATCH -e ./out_files/%x_%j.err
 #SBATCH --partition=batch_vll
@@ -11,26 +11,29 @@
 
 python linear_prob.py \
 --data_root "/local_datasets/object_direction_2D_linear_probing" \
---output_dir "results/linear_probe_simple_object_location/pe_shuffle/" \
---task_name "L-14-layer6" \
+--output_dir "results/linear_probe_simple_object_location/baseline_use_proj" \
+--task_name "L-14" \
 --model_type "ViT-L/14" \
 --cls_token \
---layer_idx 5
+--use_proj \
+--layer_idx 5   
 
 
 
 python linear_prob.py \
 --data_root "/local_datasets/object_direction_2D_linear_probing" \
---output_dir "results/linear_probe_simple_object_location/pe_shuffle/" \
---task_name "B-16-layer6" \
+--output_dir "results/linear_probe_simple_object_location/baseline_use_proj" \
+--task_name "B-16" \
 --model_type "ViT-B/16" \
 --cls_token \
---layer_idx 5
+--use_proj \
+--layer_idx 5   
 
 python linear_prob.py \
 --data_root "/local_datasets/object_direction_2D_linear_probing" \
---output_dir "results/linear_probe_simple_object_location/pe_shuffle/" \
---task_name "B-32-layer6" \
+--output_dir "results/linear_probe_simple_object_location/baseline_use_proj" \
+--task_name "B-32" \
 --model_type "ViT-B/32" \
 --cls_token \
---layer_idx 5
+--use_proj \
+--layer_idx 5   

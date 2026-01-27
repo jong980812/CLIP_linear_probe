@@ -288,7 +288,7 @@ class VisionTransformer(nn.Module):
         # Projection 적용 여부
         if use_proj:
             out = out @ self.proj  # (N, 1024) → (N, 512)
-
+        return out
 class CLIP(nn.Module):
     def __init__(self,
                  embed_dim: int,
@@ -530,14 +530,14 @@ class CLIPFeatureExtractor:
         self._hooks = []
         self.features = {}
     
-    def encode_image(self, image, layer_idx: int = -2, is_cls: bool = True):
+    def encode_image(self, image, layer_idx: int = -2, is_cls: bool = True, use_proj: bool = False, pos_mode: str = "normal"):
         """
         특정 layer의 feature를 반환
         """
         actual_idx = self.register_hook(layer_idx)
         
         # forward 실행 (hook이 자동으로 feature 저장)
-        _ = self.clip_model.encode_image(image, is_cls=is_cls)
+        _ = self.clip_model.encode_image(image, is_cls=is_cls, use_proj=use_proj, pos_mode=pos_mode)
         
         # 저장된 intermediate feature 가져오기
         feature = self.features[f'layer_{actual_idx}']

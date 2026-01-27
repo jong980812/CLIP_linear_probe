@@ -20,13 +20,13 @@ python linear_prob.py --data_root "/local_datasets/object_direction_2D_linear_pr
 
 
 
-def get_features(loader, model, device, is_cls=False):
+def get_features(loader, model, device, is_cls=False, use_proj=False, pos_mode="normal"):
     all_features = []
     all_labels = []
     
     with torch.no_grad():
         for images, labels in tqdm(loader):
-            features = model.encode_image(images.to(device), is_cls=is_cls)
+            features = model.encode_image(images.to(device), is_cls=is_cls, use_proj = use_proj, pos_mode=pos_mode)
             all_features.append(features)
             all_labels.append(labels)
 
@@ -44,13 +44,13 @@ def get_features(loader, model, device, is_cls=False):
 #             all_labels.append(labels)
 
 #     return torch.cat(all_features).cpu().numpy(), torch.cat(all_labels).cpu().numpy()
-def get_features_from_idx(loader, model, device, is_cls=False, layer_idx=-2):
+def get_features_from_idx(loader, model, device, is_cls=False, layer_idx=-2, use_proj=False, pos_mode="normal"):
     all_features = []
     all_labels = []
     
     with torch.no_grad():
         for images, labels in tqdm(loader):
-            features = model.encode_image(images.to(device), layer_idx=layer_idx, is_cls=is_cls)
+            features = model.encode_image(images.to(device), layer_idx=layer_idx, is_cls=is_cls, use_proj=use_proj, pos_mode=pos_mode)
 
             all_features.append(features.cpu())  # ✅ 바로 CPU로 이동
             all_labels.append(labels)
@@ -95,12 +95,24 @@ def main():
     )
 
     if args.layer_idx is not None:
-        train_features, train_labels = get_features_from_idx(train_loader, extractor, device, is_cls=args.cls_token, layer_idx=args.layer_idx)
-        test_features, test_labels   = get_features_from_idx(val_loader,   extractor, device, is_cls=args.cls_token, layer_idx=args.layer_idx)
+        train_features, train_labels = get_features_from_idx(train_loader, 
+                                                             extractor, 
+                                                             device, 
+                                                             is_cls=args.cls_token, 
+                                                             layer_idx=args.layer_idx, 
+                                                             use_proj=args.use_proj, 
+                                                             pos_mode=args.pos_mode)
+        test_features, test_labels   = get_features_from_idx(val_loader,
+                                                             extractor,
+                                                             device,
+                                                             is_cls=args.cls_token,
+                                                             layer_idx=args.layer_idx,
+                                                             use_proj=args.use_proj,
+                                                             pos_mode=args.pos_mode)
     # Calculate the image features
     else:
-        train_features, train_labels = get_features(train_loader, model, device, is_cls=args.cls_token)
-        test_features, test_labels   = get_features(val_loader,   model, device, is_cls=args.cls_token)
+        train_features, train_labels = get_features(train_loader, model, device, is_cls=args.cls_token, use_proj=args.use_proj, pos_mode=args.pos_mode)
+        test_features, test_labels   = get_features(val_loader,   model, device, is_cls=args.cls_token, use_proj=args.use_proj, pos_mode=args.pos_mode)
 
     classifier = LogisticRegression(random_state=0, C=0.316, max_iter=1000, verbose=1)
     classifier.fit(train_features, train_labels)
@@ -142,7 +154,18 @@ def parse_args():
         default=None,
         help="If specified, extract features from this layer index"
     )
-
+    parser.add_argument(
+        "--pos_mode",
+        type=str,
+        default="normal",
+        help="Position embedding mode: normal, shuffle,mean, zero",
+        choices=["normal", "shuffle", "mean", "zero"]
+    )
+    parser.add_argument(
+        "--use_proj",
+        action="store_true",
+        help="Use projection matrix for text embedding"
+    )
     return parser.parse_args()
 
 
