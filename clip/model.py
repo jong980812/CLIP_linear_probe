@@ -289,6 +289,52 @@ class VisionTransformer(nn.Module):
         if use_proj:
             out = out @ self.proj  # (N, 1024) → (N, 512)
         return out
+    def forward_video(self, x: torch.Tensor, is_cls: bool = True, use_proj: bool = False):
+        '''
+        Video forward - T를 batch에 합쳐서 처리 후 temporal mean pooling
+        
+        :param x: (B, C, T, H, W) video tensor
+        :return: (B, hidden_dim) video feature
+        '''
+        B, C, T, H, W = x.shape
+        
+        # (B, C, T, H, W) -> (B*T, C, H, W)
+        x = x.permute(0, 2, 1, 3, 4)  # (B, T, C, H, W)
+        x = x.reshape(B * T, C, H, W)
+        
+        # 기존 image forward 로직
+        x = self.conv1(x)  # (B*T, width, grid, grid)
+        x = x.reshape(x.shape[0], x.shape[1], -1)  # (B*T, width, grid**2)
+        x = x.permute(0, 2, 1)  # (B*T, grid**2, width)
+        x = torch.cat([
+            self.class_embedding.to(x.dtype) + torch.zeros(x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device), 
+            x
+        ], dim=1)  # (B*T, grid**2 + 1, width)
+        
+        x = x + self.positional_embedding.to(x.dtype)
+        x = self.ln_pre(x)
+
+        x = x.permute(1, 0, 2)  # NLD -> LND
+        x = self.transformer(x)
+        x = x.permute(1, 0, 2)  # LND -> NLD
+
+        # Feature 추출
+        if is_cls:
+            out = self.ln_post(x[:, 0, :])  # (B*T, hidden_dim)
+        else:
+            patch_tokens = self.ln_post(x[:, 1:, :])
+            out = torch.mean(patch_tokens, dim=1)  # (B*T, hidden_dim)
+        
+        # Projection 적용 여부
+        if use_proj:
+            out = out @ self.proj
+        
+        # ✅ (B*T, hidden_dim) -> (B, T, hidden_dim) -> temporal mean -> (B, hidden_dim)
+        hidden_dim = out.shape[-1]
+        out = out.reshape(B, T, hidden_dim)
+        out = out.mean(dim=1)  # (B, hidden_dim)
+        
+        return out
 class CLIP(nn.Module):
     def __init__(self,
                  embed_dim: int,
@@ -388,7 +434,8 @@ class CLIP(nn.Module):
 
     def encode_image(self, image, is_cls=True, pos_mode="normal", use_proj=False):
         return self.visual(image.type(self.dtype), is_cls=is_cls, pos_mode=pos_mode, use_proj=use_proj)
-
+    def encode_video(self, image, is_cls=True, use_proj=False):
+        return self.visual.forward_video(image.type(self.dtype), is_cls=is_cls, use_proj=use_proj)
     def encode_text(self, text):
         x = self.token_embedding(text).type(self.dtype)  # [batch_size, n_ctx, d_model]
 
