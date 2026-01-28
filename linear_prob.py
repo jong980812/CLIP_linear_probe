@@ -4,6 +4,8 @@ from clip.model import CLIPFeatureExtractor
 import torch
 import argparse
 import os
+from transformers import VideoMAEImageProcessor, AutoModel, AutoConfig
+
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 from torch.utils.data import DataLoader
@@ -26,24 +28,12 @@ def get_features(loader, model, device, is_cls=False, use_proj=False, pos_mode="
     
     with torch.no_grad():
         for images, labels in tqdm(loader):
-            features = model.encode_image(images.to(device), is_cls=is_cls, use_proj = use_proj, pos_mode=pos_mode)
+            features = model.encode_image(images.to(device), is_cls=is_cls, use_proj = use_proj, pos_mode=pos_mode) if len(images.shape)==4 else model.encode_video(images.to(device), is_cls=is_cls, use_proj = use_proj)
             all_features.append(features)
             all_labels.append(labels)
 
     return torch.cat(all_features).cpu().numpy(), torch.cat(all_labels).cpu().numpy()
 
-# def get_features_from_idx(loader, model, device, is_cls=False, layer_idx=-2):
-#     all_features = []
-#     all_labels = []
-    
-#     with torch.no_grad():
-#         for images, labels in tqdm(loader):
-#             features = model.encode_image(images.to(device), layer_idx=layer_idx, is_cls=is_cls)
-
-#             all_features.append(features)
-#             all_labels.append(labels)
-
-#     return torch.cat(all_features).cpu().numpy(), torch.cat(all_labels).cpu().numpy()
 def get_features_from_idx(loader, model, device, is_cls=False, layer_idx=-2, use_proj=False, pos_mode="normal"):
     all_features = []
     all_labels = []
@@ -57,62 +47,93 @@ def get_features_from_idx(loader, model, device, is_cls=False, layer_idx=-2, use
 
     return torch.cat(all_features).numpy(), torch.cat(all_labels).numpy()
 
+
+
 def main():
+    cache_dir = '/data/dataset/LLaVA-Video-100K-Subset/'
     args = parse_args()
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Proceeding on {device}")
-    model, preprocess = clip.load(args.model_type, device, download_root="/data/dataset/LLaVA-Video-100K-Subset/clip_weight")
+    model, preprocess = clip.load(args.model_type, device, download_root=cache_dir)
     model.eval()
-#!
-    extractor = CLIPFeatureExtractor(model)
+    if not args.video:
 
-    # 이미지 준비
 
-    # # 마지막에서 두 번째 layer의 feature 추출
-    # feature = extractor.encode_image(image, layer_idx=-2, is_cls=True)
-    # print(f"Feature shape: {feature.shape}")  # (4, 1024)
-#!
+        extractor = CLIPFeatureExtractor(model)
+
+        # 이미지 준비
+
+        # # 마지막에서 두 번째 layer의 feature 추출
+        # feature = extractor.encode_image(image, layer_idx=-2, is_cls=True)
+        # print(f"Feature shape: {feature.shape}")  # (4, 1024)
     # datasets
-    train_tf, val_tf = utils.data_transform()
-    train_dataset = datasets.ImageFolder(f"{args.data_root}/train", transform=train_tf)
-    val_dataset   = datasets.ImageFolder(f"{args.data_root}/val",   transform=val_tf)
+        train_tf, val_tf = utils.data_transform()
+        train_dataset = datasets.ImageFolder(f"{args.data_root}/train", transform=train_tf)
+        val_dataset   = datasets.ImageFolder(f"{args.data_root}/val",   transform=val_tf)
 
-    # dataloaders
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=256,
-        shuffle=True,
-        num_workers=8,
-        pin_memory=True
-    )
+        # dataloaders
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=256,
+            shuffle=True,
+            num_workers=8,
+            pin_memory=True
+        )
 
-    val_loader = DataLoader(
-        val_dataset,
-        batch_size=256,
-        shuffle=False,   # 중요: val은 shuffle X
-        num_workers=8,
-        pin_memory=True
-    )
+        val_loader = DataLoader(
+            val_dataset,
+            batch_size=256,
+            shuffle=False,   # 중요: val은 shuffle X
+            num_workers=8,
+            pin_memory=True
+        )
 
-    if args.layer_idx is not None:
-        train_features, train_labels = get_features_from_idx(train_loader, 
-                                                             extractor, 
-                                                             device, 
-                                                             is_cls=args.cls_token, 
-                                                             layer_idx=args.layer_idx, 
-                                                             use_proj=args.use_proj, 
-                                                             pos_mode=args.pos_mode)
-        test_features, test_labels   = get_features_from_idx(val_loader,
-                                                             extractor,
-                                                             device,
-                                                             is_cls=args.cls_token,
-                                                             layer_idx=args.layer_idx,
-                                                             use_proj=args.use_proj,
-                                                             pos_mode=args.pos_mode)
-    # Calculate the image features
+        if args.layer_idx is not None:
+            train_features, train_labels = get_features_from_idx(train_loader, 
+                                                                extractor, 
+                                                                device, 
+                                                                is_cls=args.cls_token, 
+                                                                layer_idx=args.layer_idx, 
+                                                                use_proj=args.use_proj, 
+                                                                pos_mode=args.pos_mode)
+            test_features, test_labels   = get_features_from_idx(val_loader,
+                                                                extractor,
+                                                                device,
+                                                                is_cls=args.cls_token,
+                                                                layer_idx=args.layer_idx,
+                                                                use_proj=args.use_proj,
+                                                                pos_mode=args.pos_mode)
+        # Calculate the image features
+        else:
+            train_features, train_labels = get_features(train_loader, model, device, is_cls=args.cls_token, use_proj=args.use_proj, pos_mode=args.pos_mode)
+            test_features, test_labels   = get_features(val_loader,   model, device, is_cls=args.cls_token, use_proj=args.use_proj, pos_mode=args.pos_mode)
     else:
-        train_features, train_labels = get_features(train_loader, model, device, is_cls=args.cls_token, use_proj=args.use_proj, pos_mode=args.pos_mode)
-        test_features, test_labels   = get_features(val_loader,   model, device, is_cls=args.cls_token, use_proj=args.use_proj, pos_mode=args.pos_mode)
+        batch_size = 32
+        num_workers = 8
+        num_frames = 16
+        processor = VideoMAEImageProcessor.from_pretrained(
+            "OpenGVLab/VideoMAEv2-Base", 
+            cache_dir=cache_dir
+        )
+        train_dataset = utils.VideoFolderDataset(f"{args.data_root}/train", processor, num_frames=num_frames)
+        val_dataset = utils.VideoFolderDataset(f"{args.data_root}/val", processor, num_frames=num_frames)
+        
+        train_loader = DataLoader(
+            train_dataset, 
+            batch_size=batch_size, 
+            shuffle=True,
+            num_workers=num_workers,
+            pin_memory=True
+        )
+        val_loader = DataLoader(
+            val_dataset, 
+            batch_size=batch_size, 
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=True
+        )
+        train_features, train_labels = get_features(train_loader, model, device, is_cls=args.cls_token, use_proj=args.use_proj)
+        test_features, test_labels   = get_features(val_loader,   model, device, is_cls=args.cls_token, use_proj=args.use_proj)
 
     classifier = LogisticRegression(random_state=0, C=0.316, max_iter=1000, verbose=1)
     classifier.fit(train_features, train_labels)
@@ -165,6 +186,11 @@ def parse_args():
         "--use_proj",
         action="store_true",
         help="Use projection matrix for text embedding"
+    )
+    parser.add_argument(
+        "--video",
+        action="store_true",
+        help="Use video encoder instead of image encoder"
     )
     return parser.parse_args()
 
