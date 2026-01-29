@@ -113,8 +113,13 @@ def main():
         num_frames = 16
         processor = VideoMAEImageProcessor.from_pretrained(
             "OpenGVLab/VideoMAEv2-Base", 
-            cache_dir=cache_dir
+            cache_dir=cache_dir,
+            do_center_crop=False,
+            size=(224,224)
         )
+        processor.mean =list(preprocess.transforms[4].mean)
+        processor.std=list(preprocess.transforms[4].std)
+        
         train_dataset = utils.VideoFolderDataset(f"{args.data_root}/train", processor, num_frames=num_frames)
         val_dataset = utils.VideoFolderDataset(f"{args.data_root}/val", processor, num_frames=num_frames)
         
