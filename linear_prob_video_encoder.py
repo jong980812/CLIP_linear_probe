@@ -42,10 +42,10 @@ def get_video_features(loader, model, device):
 def main():
     args = parse_args()
     # ============ Config ============
-    train_dir = '/data/dataset/vlm_direction/2D_direction_video_linear_probing/train'  # 클래스별 폴더 구조
-    val_dir = '/data/dataset/vlm_direction/2D_direction_video_linear_probing/val'
+    train_dir = f'{args.data_root}/train'  # 클래스별 폴더 구조
+    val_dir = f'{args.data_root}/val'
     cache_dir = '/data/dataset/LLaVA-Video-100K-Subset/'
-    batch_size = 16
+    batch_size = 64
     num_workers = 8
     num_frames = 16
     
@@ -88,7 +88,7 @@ def main():
         num_workers=num_workers,
         pin_memory=True
     )
-    
+        # return
     # ============ Feature Extraction ============
     print("Extracting train features...")
     train_features, train_labels = get_video_features(train_loader, model, device)
@@ -97,6 +97,8 @@ def main():
     print("Extracting val features...")
     test_features, test_labels = get_video_features(val_loader, model, device)
     print(f"Test features shape: {test_features.shape}")
+    if args.tsne:
+        utils.plot_tsne(test_features, test_labels, args.output_dir, args.task_name)
     
     # ============ Linear Probe ============
     print("Training classifier...")
@@ -135,7 +137,8 @@ def parse_args():
     parser.add_argument("--data_root", type=str, required=True)
     parser.add_argument("--output_dir", type=str, required=True)
     parser.add_argument("--task_name", type=str, required=True)
-
+    parser.add_argument("--tsne",
+        action="store_true",)
 
     return parser.parse_args()
 
