@@ -216,6 +216,9 @@ class VisionTransformer(nn.Module):
         self.ln_pre = LayerNorm(width)
 
         self.transformer = Transformer(width, layers, heads)
+        
+        
+        ##
 
         self.ln_post = LayerNorm(width)
         self.proj = nn.Parameter(scale * torch.randn(width, output_dim))
@@ -312,6 +315,10 @@ class VisionTransformer(nn.Module):
         ], dim=1)  # (B*T, grid**2 + 1, width)
         
         x = x + self.positional_embedding.to(x.dtype)
+        # forward_video 내부에서 바로 
+        temporal_emb = torch.linspace(0, 16, T, dtype=x.dtype, device=x.device)  # 0 ~ 1
+        temporal_emb = temporal_emb.repeat(B)  # (B*T,)
+        x = x + temporal_emb.view(B*T, 1, 1)
         x = self.ln_pre(x)
 
         x = x.permute(1, 0, 2)  # NLD -> LND

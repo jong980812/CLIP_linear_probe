@@ -197,3 +197,109 @@ class VideoFolderDataset(Dataset):
         except Exception as e:
             print(f"Error loading {video_path}: {e}")
             return torch.zeros(3, self.num_frames, 224, 224), label
+        
+        
+        
+        
+from sklearn.manifold import TSNE
+import matplotlib.pyplot as plt
+# def plot_tsne(test_features, test_labels, output_dir, task_name):
+#     os.makedirs(os.path.join(output_dir, task_name), exist_ok=True)
+#     tsne = TSNE(n_components=2, random_state=42, perplexity=30)
+#     features_2d = tsne.fit_transform(test_features)
+    
+#     # 클래스별로 따로 그리기
+#     plt.figure(figsize=(10, 8))
+#     unique_labels = np.unique(test_labels)
+#     colors = plt.cm.tab10(np.linspace(0, 1, len(unique_labels)))
+    
+#     for i, label in enumerate(unique_labels):
+#         mask = test_labels == label
+#         plt.scatter(features_2d[mask, 0], features_2d[mask, 1], 
+#                    c=[colors[i]], label=f'Class {label}', alpha=0.6, s=10)
+    
+#     plt.legend()
+#     plt.title('t-SNE Visualization')
+#     plt.xlabel('t-SNE 1')
+#     plt.ylabel('t-SNE 2')
+#     plt.tight_layout()
+#     plt.savefig(os.path.join(output_dir, task_name, 'tsne_visualization.png'), dpi=150)
+#     plt.close()
+    
+    
+# def plot_tsne(test_features, test_labels, output_dir, task_name):
+#     os.makedirs(os.path.join(output_dir, task_name), exist_ok=True)
+    
+#     tsne = TSNE(n_components=2, random_state=42, perplexity=30)
+#     features_2d = tsne.fit_transform(test_features)
+    
+#     unique_labels = np.unique(test_labels)
+#     colors = plt.cm.tab10(np.linspace(0, 1, len(unique_labels)))
+    
+#     # 클래스 그룹 정의
+#     groups = {
+#         'class_0_3': [0, 3],
+#         'class_1_2': [1, 2]
+#     }
+    
+#     for group_name, class_list in groups.items():
+#         plt.figure(figsize=(10, 8))
+        
+#         for label in class_list:
+#             mask = test_labels == label
+#             color_idx = list(unique_labels).index(label)
+#             plt.scatter(features_2d[mask, 0], features_2d[mask, 1], 
+#                        c=[colors[color_idx]], label=f'Class {label}', alpha=0.6, s=10)
+        
+#         plt.legend()
+#         plt.title(f't-SNE Visualization ({group_name})')
+#         plt.xlabel('t-SNE 1')
+#         plt.ylabel('t-SNE 2')
+#         plt.tight_layout()
+#         plt.savefig(os.path.join(output_dir, task_name, f'tsne_{group_name}.png'), dpi=150)
+#         plt.close()
+        
+def plot_tsne(test_features, test_labels, output_dir, task_name, max_samples=1000):
+    
+    os.makedirs(os.path.join(output_dir, task_name), exist_ok=True)
+    # 샘플링 (점 개수 줄이기)
+    if len(test_features) > max_samples:
+        idx = np.random.choice(len(test_features), max_samples, replace=False)
+        plot_features = test_features[idx]
+        plot_labels = test_labels[idx]
+    else:
+        plot_features = test_features
+        plot_labels = test_labels
+    
+    tsne = TSNE(n_components=2, random_state=42, perplexity=30)
+    features_2d = tsne.fit_transform(plot_features)
+    
+    # 클래스별 색상 직접 지정 (확실히 구분되게)
+    color_map = {
+        0: 'tab:blue',
+        1: 'tab:orange', 
+        2: 'tab:green',
+        3: 'tab:red'
+    }
+    
+    groups = {
+        'class_0_3': [0, 3],
+        'class_1_2': [1, 2]
+    }
+    
+    for group_name, class_list in groups.items():
+        plt.figure(figsize=(10, 8))
+        
+        for label in class_list:
+            mask = plot_labels == label
+            plt.scatter(features_2d[mask, 0], features_2d[mask, 1], 
+                       c=color_map[label], label=f'Class {label}', 
+                       alpha=0.5, s=15, edgecolors='white', linewidths=0.3)
+        
+        plt.legend(markerscale=2)
+        plt.title(f't-SNE Visualization ({group_name})')
+        plt.xlabel('t-SNE 1')
+        plt.ylabel('t-SNE 2')
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_dir, task_name, f'tsne_{group_name}.png'), dpi=150)
+        plt.close()

@@ -108,13 +108,18 @@ def main():
             train_features, train_labels = get_features(train_loader, model, device, is_cls=args.cls_token, use_proj=args.use_proj, pos_mode=args.pos_mode)
             test_features, test_labels   = get_features(val_loader,   model, device, is_cls=args.cls_token, use_proj=args.use_proj, pos_mode=args.pos_mode)
     else:
-        batch_size = 32
+        batch_size = 48
         num_workers = 8
         num_frames = 16
         processor = VideoMAEImageProcessor.from_pretrained(
             "OpenGVLab/VideoMAEv2-Base", 
-            cache_dir=cache_dir
+            cache_dir=cache_dir,
+            do_center_crop=False,
+            size=(224,224)
         )
+        processor.mean =list(preprocess.transforms[4].mean)
+        processor.std=list(preprocess.transforms[4].std)
+        
         train_dataset = utils.VideoFolderDataset(f"{args.data_root}/train", processor, num_frames=num_frames)
         val_dataset = utils.VideoFolderDataset(f"{args.data_root}/val", processor, num_frames=num_frames)
         
@@ -132,8 +137,11 @@ def main():
             num_workers=num_workers,
             pin_memory=True
         )
-        train_features, train_labels = get_features(train_loader, model, device, is_cls=args.cls_token, use_proj=args.use_proj)
         test_features, test_labels   = get_features(val_loader,   model, device, is_cls=args.cls_token, use_proj=args.use_proj)
+        if args.tsne:
+            utils.plot_tsne(test_features, test_labels, args.output_dir, args.task_name)
+            # return
+        train_features, train_labels = get_features(train_loader, model, device, is_cls=args.cls_token, use_proj=args.use_proj)
 
     classifier = LogisticRegression(random_state=0, C=0.316, max_iter=1000, verbose=1)
     classifier.fit(train_features, train_labels)
@@ -192,6 +200,10 @@ def parse_args():
         action="store_true",
         help="Use video encoder instead of image encoder"
     )
+    parser.add_argument(
+        "--tsne",
+        action="store_true",
+        help="Plot t-SNE of extracted features and exit")
     return parser.parse_args()
 
 

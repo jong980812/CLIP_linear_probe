@@ -14,3 +14,5 @@ out_files/
 job.sh
 *.sh
 data/
+a.py
+data_gen
